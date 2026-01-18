@@ -5,18 +5,10 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Controls } from '@/components/Controls';
 import { HotelView } from '@/components/HotelView';
 import Link from 'next/link';
-// Backend-powered: we'll call the Express API at https://hotes-reservation-system-kjt9.vercel.app
-
-/**
- * Generate room data
- * Floors 1-9: 10 rooms each (101-110, 201-210, ...)
- * Floor 10: 7 rooms (1001-1007)
- */
 
 function generateRooms() {
   const rooms = [];
 
-  // Floors 1-9
   for (let floor = 1; floor <= 9; floor++) {
     for (let pos = 0; pos < 10; pos++) {
       rooms.push({
@@ -29,7 +21,6 @@ function generateRooms() {
     }
   }
 
-  // Floor 10 (7 rooms)
   for (let pos = 0; pos < 7; pos++) {
     rooms.push({
       id: 1000 + (pos + 1),
@@ -47,19 +38,16 @@ export default function App() {
   const [rooms, setRooms] = useState(generateRooms());
   const [inputValue, setInputValue] = useState(2);
 
-  // Fetch current rooms from backend
   const fetchRooms = async () => {
     try {
       const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/rooms');
       if (!res.ok) throw new Error('Failed to fetch rooms');
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) {
-        // fallback to local generation
         setRooms(generateRooms());
         toast('Using local rooms fallback');
         return;
       }
-      // ensure `newlyBooked` flag present on each room
       setRooms(data.map(r => ({ ...r, newlyBooked: false })));
     } catch (err) {
       setRooms(generateRooms());
@@ -71,7 +59,6 @@ export default function App() {
     fetchRooms();
   }, []);
 
-  // Handle booking via backend
   const handleBook = async () => {
     try {
       const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/book', {
@@ -79,7 +66,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestedCount: Number(inputValue) }),
       });
-      // Parse JSON if present, otherwise read text
+
       let data = null;
       const contentType = res.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
@@ -107,7 +94,6 @@ export default function App() {
     }
   };
 
-  // Handle randomize via backend
   const handleRandomize = async () => {
     try {
       const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/random', { method: 'POST' });
@@ -123,7 +109,6 @@ export default function App() {
     }
   };
 
-  // Handle reset via backend
   const handleReset = async () => {
     try {
       const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/reset', { method: 'POST' });
@@ -131,7 +116,6 @@ export default function App() {
         toast.error('Reset failed');
         return;
       }
-      // reload rooms from backend
       await fetchRooms();
       toast.success('Rooms reset');
     } catch (err) {

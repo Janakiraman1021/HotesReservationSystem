@@ -16,7 +16,6 @@ function getCombinations(arr, k, start = 0, path = [], res = []) {
 export function allocateRooms(rooms, requestedCount) {
   const available = rooms.filter(r => !r.occupied);
 
-  // -------- SAME FLOOR FIRST --------
   const floorMap = {};
   for (const r of available) {
     if (!floorMap[r.floor]) floorMap[r.floor] = [];
@@ -26,7 +25,6 @@ export function allocateRooms(rooms, requestedCount) {
   let bestSameFloor = null;
   let minHorizontal = Infinity;
 
-  // Iterate floors in ascending order to give priority F1 -> F10
   const floorsOrdered = Object.keys(floorMap).map(Number).sort((a, b) => a - b);
   for (const floor of floorsOrdered) {
     const list = floorMap[floor];
@@ -36,8 +34,7 @@ export function allocateRooms(rooms, requestedCount) {
 
     for (let i = 0; i <= list.length - requestedCount; i++) {
       const window = list.slice(i, i + requestedCount);
-      const dist =
-        window[window.length - 1].position - window[0].position;
+      const dist = window[window.length - 1].position - window[0].position;
 
       if (dist < minHorizontal) {
         minHorizontal = dist;
@@ -50,12 +47,10 @@ export function allocateRooms(rooms, requestedCount) {
     return bestSameFloor.map(r => r.id);
   }
 
-  // -------- CROSS FLOOR (BRUTE FORCE) --------
   const combos = getCombinations(available, requestedCount);
   let bestCombo = null;
   let minTravel = Infinity;
 
-  // For cross-floor, prefer combos with smaller travel; tie-break by lower average floor (prefer F1..F10)
   let bestAvgFloor = Infinity;
   for (const combo of combos) {
     const floors = combo.map(r => r.floor);

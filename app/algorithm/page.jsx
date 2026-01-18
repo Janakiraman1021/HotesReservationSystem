@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState } from 'react';
 import { useRef } from 'react';
@@ -11,25 +11,20 @@ export default function AlgorithmPage() {
     return () => clearTimeout(t);
   }, []);
 
-  // number of rooms to pick (static: 3)
   const requestedCount = 3;
 
-  /* ---------- Visualization logic ---------- */
   const containerRef = useRef(null);
   const floorsRef = useRef(null);
   const svgRef = useRef(null);
   const roomRefs = useRef({});
 
-  // mock data (deterministic occupancy pattern)
   function createMockRooms() {
     const rooms = [];
-    // Floors 10 down to 1 for rendering top->bottom
     for (let floor = 10; floor >= 1; floor--) {
       const count = floor === 10 ? 7 : 10;
       const floorRooms = [];
       for (let pos = 0; pos < count; pos++) {
         const id = floor === 10 ? 1000 + pos + 1 : floor * 100 + (pos + 1);
-        // deterministic occupancy: occupy every 3rd room, but keep gaps
         const occupied = (pos + floor) % 7 === 0 || (pos % 6 === 0 && floor % 2 === 0);
         floorRooms.push({ id, floor, pos, occupied });
       }
@@ -41,10 +36,8 @@ export default function AlgorithmPage() {
   const [mockFloors] = useState(createMockRooms());
   const [animState, setAnimState] = useState({ running: false, step: 0, speed: 1 });
 
-  // helper sleep with speed
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms / animState.speed));
 
-  // draw floors into DOM once
   useEffect(() => {
     const floorsEl = document.getElementById('floors');
     if (!floorsEl) return;
@@ -68,7 +61,7 @@ export default function AlgorithmPage() {
         el.dataset.id = r.id;
         el.dataset.floor = r.floor;
         el.dataset.pos = r.pos;
-        el.textContent = r.id % 1000; // short label
+        el.textContent = r.id % 1000;
         roomsWrap.appendChild(el);
         roomRefs.current[r.id] = el;
       });
@@ -77,7 +70,6 @@ export default function AlgorithmPage() {
     });
   }, [mockFloors]);
 
-  // drawing connections (svg lines)
   const drawConnections = (pairs) => {
     const svg = document.getElementById('connections');
     if (!svg) return;
@@ -105,14 +97,11 @@ export default function AlgorithmPage() {
     });
   };
 
-  // core animation runner
   async function runVisualization() {
     if (animState.running) return;
     setAnimState((s) => ({ ...s, running: true }));
     const statusEl = document.getElementById('viz-status');
-    // STEP 1: Initialize hotel and highlight origin
     statusEl.textContent = 'STEP 1 — Initialize (origin: Floor 1 Room 101)';
-    // highlight origin (Floor 1 pos 0)
     const originEl = Object.values(roomRefs.current).find((el) => el.dataset.floor === '1' && el.dataset.pos === '0');
     if (originEl) {
       originEl.classList.add('origin');
@@ -120,82 +109,61 @@ export default function AlgorithmPage() {
     await sleep(700);
     if (originEl) originEl.classList.remove('origin');
 
-    // STEP 1.5: Filter available rooms
     statusEl.textContent = 'STEP 1 — Filtering rooms';
-    // fade occupied
     Object.values(roomRefs.current).forEach((r) => {
       if (r.classList.contains('occupied')) r.classList.add('faded');
       else r.classList.add('available-highlight');
     });
     await sleep(900);
-    // remove highlight
     Object.values(roomRefs.current).forEach((r) => r.classList.remove('available-highlight'));
 
-    // STEP 2: Same-floor scan top->bottom
     statusEl.textContent = `STEP 2 — Scanning same floor (looking for ${requestedCount})`;
-    // scan starting from Floor 1 upwards (floor 1 -> 2 -> ...)
     const floorsEls = Array.from(document.querySelectorAll('.floor-row')).sort((a, b) => Number(a.dataset.floor) - Number(b.dataset.floor));
     let found = false;
     for (const floorEl of floorsEls) {
-      // slide window across this floor starting from pos 0 (closest to lift)
       const roomEls = Array.from(floorEl.querySelectorAll('.room'));
-      // flash the floor label
       floorEl.classList.add('scanning');
       await sleep(300);
-      // compute positions of available
       const avail = roomEls.map((el, idx) => ({ el, idx, occupied: el.classList.contains('occupied') }));
       const requested = requestedCount;
       if (avail.filter((a) => !a.occupied).length >= requested) {
-        // sliding window across positions: window must be contiguous positions where none are occupied
         for (let i = 0; i <= roomEls.length - requested; i++) {
           const windowEls = roomEls.slice(i, i + requested);
-          // animate window
           windowEls.forEach((w) => w.classList.add('window'));
           await sleep(600);
-          // check if all available
           const allFree = windowEls.every((we) => !we.classList.contains('occupied'));
           if (allFree) {
-            // show evaluation briefly then select
             windowEls.forEach((w) => w.classList.add('evaluated'));
             await sleep(300);
             const chosen = windowEls.map((el) => Number(el.dataset.id));
-        chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
+            chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
             statusEl.textContent = `Same-floor optimal solution found — selected ${chosen.length}`;
-        found = true;
-            // cleanup window visuals
+            found = true;
             windowEls.forEach((w) => w.classList.remove('window', 'evaluated'));
             floorEl.classList.remove('scanning');
             break;
           }
-          // clean visuals and continue sliding
           windowEls.forEach((w) => w.classList.remove('window'));
           windowEls.forEach((w) => w.classList.remove('evaluated'));
         }
         if (found) break;
-        // if slide finished without finding, continue to next floor
         floorEl.classList.remove('scanning');
         await sleep(200);
         continue;
       }
       floorEl.classList.remove('scanning');
-      // small delay before next floor
       await sleep(400);
     }
 
-    // STEP 3: cross-floor fallback (if not found)
     if (!found) {
       statusEl.textContent = 'STEP 3 — Cross-floor fallback';
-      // compute all available room ids
       const allAvail = Object.values(roomRefs.current).filter((el) => !el.classList.contains('occupied'));
-      // pick a demo combination spread across floors respecting requestedCount
       const n = Math.min(requestedCount, allAvail.length);
       const L = allAvail.length;
       const chosenEls = [];
       if (n === 1) {
         chosenEls.push(allAvail[Math.floor(L / 2)]);
       } else {
-        // choose rooms starting near lift on lower floors first to minimize travel
-        // sort available by (floor distance from 1 ascending, position ascending)
         const sorted = allAvail.slice().sort((a, b) => {
           const fa = Number(a.dataset.floor);
           const fb = Number(b.dataset.floor);
@@ -209,10 +177,8 @@ export default function AlgorithmPage() {
         for (let i = 0; i < n; i++) chosenEls.push(sorted[i]);
       }
       const chosen = chosenEls.map((el) => Number(el.dataset.id));
-      // draw connections
       await sleep(300);
       drawConnections(chosen.map((id, i, arr) => [id, arr[(i + 1) % arr.length]]));
-      // bounding box animation: highlight min->max floor rows
       const floors = chosen.map((id) => Number(roomRefs.current[id].dataset.floor));
       const minF = Math.min(...floors);
       const maxF = Math.max(...floors);
@@ -222,14 +188,11 @@ export default function AlgorithmPage() {
         if (f <= maxF && f >= minF) r.classList.add('boxed');
       });
       await sleep(900);
-      // compute and show travel time (visual badge)
       statusEl.textContent = `Computed total travel: ${(maxF - minF) * 2} (vertical) + spread (horizontal) — selected ${chosen.length}`;
-      // mark selected
       chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
       await sleep(600);
     }
 
-    // STEP 4: final pulse
     statusEl.textContent = 'STEP 4 — Final selection';
     Object.values(roomRefs.current).forEach((r) => {
       if (!r.classList.contains('selected')) r.classList.add('muted');
@@ -242,7 +205,6 @@ export default function AlgorithmPage() {
     statusEl.textContent = 'Done';
   }
 
-  // wire up buttons once DOM is ready
   useEffect(() => {
     const play = document.getElementById('play-btn');
     const reset = document.getElementById('reset-btn');
@@ -252,14 +214,11 @@ export default function AlgorithmPage() {
     if (!play || !reset || !speed || !statusEl) return;
     const onPlay = async () => {
       if (animState.running) return;
-      // apply chosen speed
       setAnimState((s) => ({ ...s, speed: Number(speed.value) }));
-      // disable controls during animation
       play.disabled = true;
       reset.disabled = true;
       speed.disabled = true;
       if (selectRooms) selectRooms.disabled = true;
-      // clear previous state
       document.querySelectorAll('.room').forEach((r) => r.classList.remove('selected', 'muted', 'boxed', 'faded', 'pulse', 'origin'));
       document.querySelectorAll('.floor-row').forEach((r) => r.classList.remove('scanning'));
       const svg = document.getElementById('connections');
@@ -277,7 +236,6 @@ export default function AlgorithmPage() {
     const onReset = () => {
       setAnimState((s) => ({ ...s, running: false }));
       document.querySelectorAll('.room').forEach((r) => {
-        // restore base classes; keep occupied marker if present
         const occupied = r.classList.contains('occupied');
         r.className = 'room' + (occupied ? ' occupied' : '');
       });
@@ -285,7 +243,6 @@ export default function AlgorithmPage() {
       const svg = document.getElementById('connections');
       if (svg) svg.innerHTML = '';
       statusEl.textContent = 'Ready';
-      // ensure controls enabled
       play.disabled = false;
       reset.disabled = false;
       speed.disabled = false;
@@ -305,7 +262,6 @@ export default function AlgorithmPage() {
       <div className="bg-orbs" />
 
       <main className="algo-card">
-        {/* Visualization section (added) */}
         <section className="viz">
           <div className="viz-controls">
             <div className="controls-row">
@@ -327,7 +283,6 @@ export default function AlgorithmPage() {
           <div className="viz-area" id="viz-area">
             <div className="elevator">Lift</div>
             <div className="floors" id="floors">
-              {/* floors rendered by JS below */}
             </div>
             <svg className="connections" id="connections" />
           </div>
@@ -402,7 +357,7 @@ export default function AlgorithmPage() {
         .panel code{background:rgba(255,255,255,0.02);padding:2px 6px;border-radius:6px;color:#9ee7ff}
         .one-liner{margin-top:12px;color:#b6c7e6;font-style:italic}
 
-        /* reveal animation */
+        
         .ready .panel{opacity:1;transform:none}
         .ready .panel:nth-child(1){transition-delay:120ms}
         .ready .panel:nth-child(2){transition-delay:220ms}
@@ -410,12 +365,12 @@ export default function AlgorithmPage() {
         .ready .grid .panel:nth-child(1){transition-delay:240ms}
         .ready .grid .panel:nth-child(2){transition-delay:300ms}
 
-        /* subtle hover */
+        
         .panel:hover{transform:translateY(-6px) scale(1.005);box-shadow:0 18px 60px rgba(0,212,255,0.04)}
 
-        /* responsive */
+        
         @media (max-width:880px){.grid{grid-template-columns:1fr}.algo-card{padding:20px}}
-        /* visualization styles */
+        
         .viz{margin-bottom:18px;padding:12px;border-radius:12px}
         .viz-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
         .controls-row{display:flex;gap:8px;align-items:center}
