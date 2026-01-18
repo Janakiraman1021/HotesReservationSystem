@@ -11,8 +11,8 @@ export default function AlgorithmPage() {
     return () => clearTimeout(t);
   }, []);
 
-  // number of rooms to pick (1-5) — user-controlled
-  const [requestedCount, setRequestedCount] = useState(3);
+  // number of rooms to pick (static: 3)
+  const requestedCount = 3;
 
   /* ---------- Visualization logic ---------- */
   const containerRef = useRef(null);
@@ -110,8 +110,17 @@ export default function AlgorithmPage() {
     if (animState.running) return;
     setAnimState((s) => ({ ...s, running: true }));
     const statusEl = document.getElementById('viz-status');
+    // STEP 1: Initialize hotel and highlight origin
+    statusEl.textContent = 'STEP 1 — Initialize (origin: Floor 1 Room 101)';
+    // highlight origin (Floor 1 pos 0)
+    const originEl = Object.values(roomRefs.current).find((el) => el.dataset.floor === '1' && el.dataset.pos === '0');
+    if (originEl) {
+      originEl.classList.add('origin');
+    }
+    await sleep(700);
+    if (originEl) originEl.classList.remove('origin');
 
-    // STEP 1: Filter available rooms
+    // STEP 1.5: Filter available rooms
     statusEl.textContent = 'STEP 1 — Filtering rooms';
     // fade occupied
     Object.values(roomRefs.current).forEach((r) => {
@@ -124,39 +133,49 @@ export default function AlgorithmPage() {
 
     // STEP 2: Same-floor scan top->bottom
     statusEl.textContent = `STEP 2 — Scanning same floor (looking for ${requestedCount})`;
-    const floorsEls = Array.from(document.querySelectorAll('.floor-row'));
+    // scan starting from Floor 1 upwards (floor 1 -> 2 -> ...)
+    const floorsEls = Array.from(document.querySelectorAll('.floor-row')).sort((a, b) => Number(a.dataset.floor) - Number(b.dataset.floor));
     let found = false;
     for (const floorEl of floorsEls) {
-      // slide window across this floor
-      const rooms = Array.from(floorEl.querySelectorAll('.room')).filter((el) => !el.classList.contains('occupied'));
-      // if not enough, show quick scan
+      // slide window across this floor starting from pos 0 (closest to lift)
       const roomEls = Array.from(floorEl.querySelectorAll('.room'));
       // flash the floor label
       floorEl.classList.add('scanning');
       await sleep(300);
       // compute positions of available
-      const avail = roomEls.filter((el) => !el.classList.contains('occupied'));
+      const avail = roomEls.map((el, idx) => ({ el, idx, occupied: el.classList.contains('occupied') }));
       const requested = requestedCount;
-      if (avail.length >= requested) {
-        // sliding window across indices of positions (use contiguous slots visually)
-        for (let i = 0; i <= avail.length - requested; i++) {
-          const window = avail.slice(i, i + requested);
-          window.forEach((w) => w.classList.add('window'));
-          await sleep(700);
-          // evaluate horizontal distance visually by showing a small badge
-          window.forEach((w) => w.classList.add('evaluated'));
-          await sleep(300);
-          // stop window
-          window.forEach((w) => w.classList.remove('window'));
-          window.forEach((w) => w.classList.remove('evaluated'));
-        }
-        // pick first valid window as demo selection (lock)
-        const chosen = avail.slice(0, requested).map((el) => Number(el.dataset.id));
+      if (avail.filter((a) => !a.occupied).length >= requested) {
+        // sliding window across positions: window must be contiguous positions where none are occupied
+        for (let i = 0; i <= roomEls.length - requested; i++) {
+          const windowEls = roomEls.slice(i, i + requested);
+          // animate window
+          windowEls.forEach((w) => w.classList.add('window'));
+          await sleep(600);
+          // check if all available
+          const allFree = windowEls.every((we) => !we.classList.contains('occupied'));
+          if (allFree) {
+            // show evaluation briefly then select
+            windowEls.forEach((w) => w.classList.add('evaluated'));
+            await sleep(300);
+            const chosen = windowEls.map((el) => Number(el.dataset.id));
         chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
-        statusEl.textContent = `Same-floor optimal solution found — selected ${chosen.length}`;
+            statusEl.textContent = `Same-floor optimal solution found — selected ${chosen.length}`;
         found = true;
+            // cleanup window visuals
+            windowEls.forEach((w) => w.classList.remove('window', 'evaluated'));
+            floorEl.classList.remove('scanning');
+            break;
+          }
+          // clean visuals and continue sliding
+          windowEls.forEach((w) => w.classList.remove('window'));
+          windowEls.forEach((w) => w.classList.remove('evaluated'));
+        }
+        if (found) break;
+        // if slide finished without finding, continue to next floor
         floorEl.classList.remove('scanning');
-        break;
+        await sleep(200);
+        continue;
       }
       floorEl.classList.remove('scanning');
       // small delay before next floor
@@ -175,10 +194,19 @@ export default function AlgorithmPage() {
       if (n === 1) {
         chosenEls.push(allAvail[Math.floor(L / 2)]);
       } else {
-        for (let i = 0; i < n; i++) {
-          const idx = Math.round((i * (L - 1)) / (n - 1));
-          chosenEls.push(allAvail[idx]);
-        }
+        // choose rooms starting near lift on lower floors first to minimize travel
+        // sort available by (floor distance from 1 ascending, position ascending)
+        const sorted = allAvail.slice().sort((a, b) => {
+          const fa = Number(a.dataset.floor);
+          const fb = Number(b.dataset.floor);
+          const pa = Number(a.dataset.pos);
+          const pb = Number(b.dataset.pos);
+          const da = Math.abs(fa - 1);
+          const db = Math.abs(fb - 1);
+          if (da !== db) return da - db;
+          return pa - pb;
+        });
+        for (let i = 0; i < n; i++) chosenEls.push(sorted[i]);
       }
       const chosen = chosenEls.map((el) => Number(el.dataset.id));
       // draw connections
@@ -219,26 +247,51 @@ export default function AlgorithmPage() {
     const play = document.getElementById('play-btn');
     const reset = document.getElementById('reset-btn');
     const speed = document.getElementById('speed-select');
+    const selectRooms = document.querySelector('.controls-row select');
     const statusEl = document.getElementById('viz-status');
     if (!play || !reset || !speed || !statusEl) return;
-    const onPlay = () => {
+    const onPlay = async () => {
+      if (animState.running) return;
       // apply chosen speed
       setAnimState((s) => ({ ...s, speed: Number(speed.value) }));
+      // disable controls during animation
+      play.disabled = true;
+      reset.disabled = true;
+      speed.disabled = true;
+      if (selectRooms) selectRooms.disabled = true;
       // clear previous state
-      document.querySelectorAll('.room').forEach((r) => r.classList.remove('selected', 'muted', 'boxed', 'faded', 'pulse'));
+      document.querySelectorAll('.room').forEach((r) => r.classList.remove('selected', 'muted', 'boxed', 'faded', 'pulse', 'origin'));
       document.querySelectorAll('.floor-row').forEach((r) => r.classList.remove('scanning'));
       const svg = document.getElementById('connections');
       if (svg) svg.innerHTML = '';
-      runVisualization();
+      try {
+        await runVisualization();
+      } finally {
+        play.disabled = false;
+        reset.disabled = false;
+        speed.disabled = false;
+        if (selectRooms) selectRooms.disabled = false;
+      }
     };
+
     const onReset = () => {
       setAnimState((s) => ({ ...s, running: false }));
-      document.querySelectorAll('.room').forEach((r) => r.className = 'room' + (r.classList.contains('occupied') ? ' occupied' : ''));
+      document.querySelectorAll('.room').forEach((r) => {
+        // restore base classes; keep occupied marker if present
+        const occupied = r.classList.contains('occupied');
+        r.className = 'room' + (occupied ? ' occupied' : '');
+      });
       document.querySelectorAll('.floor-row').forEach((r) => r.classList.remove('scanning', 'boxed'));
       const svg = document.getElementById('connections');
       if (svg) svg.innerHTML = '';
       statusEl.textContent = 'Ready';
+      // ensure controls enabled
+      play.disabled = false;
+      reset.disabled = false;
+      speed.disabled = false;
+      if (selectRooms) selectRooms.disabled = false;
     };
+
     play.addEventListener('click', onPlay);
     reset.addEventListener('click', onReset);
     return () => {
@@ -257,12 +310,8 @@ export default function AlgorithmPage() {
           <div className="viz-controls">
             <div className="controls-row">
               <label>Rooms to pick:</label>
-              <select value={requestedCount} onChange={(e) => setRequestedCount(Number(e.target.value))}>
-                <option value={1}>1</option>
-                <option value={2}>2</option>
+              <select value={3} disabled>
                 <option value={3}>3</option>
-                <option value={4}>4</option>
-                <option value={5}>5</option>
               </select>
               <button className="btn" id="play-btn">Play animation</button>
               <button className="btn ghost" id="reset-btn">Reset</button>
@@ -384,6 +433,7 @@ export default function AlgorithmPage() {
         .room.occupied{background:linear-gradient(180deg,#3b0f0f,#5a1111);color:#ffd6d6}
         .room.faded{opacity:0.28;transform:scale(0.98)}
         .room.available-highlight{box-shadow:0 6px 24px rgba(0,212,255,0.06);transform:translateY(-2px)}
+        .room.origin{outline:3px solid rgba(140,200,255,0.12);box-shadow:0 10px 30px rgba(140,200,255,0.06);transform:translateY(-3px)}
         .floor-row.scanning .floor-label{color:#9ee7ff;text-shadow:0 6px 20px rgba(0,212,255,0.04)}
         .room.window{outline:3px solid rgba(0,212,255,0.11);box-shadow:0 8px 30px rgba(0,212,255,0.06);transform:translateY(-4px)}
         .room.evaluated{box-shadow:0 10px 40px rgba(0,212,255,0.08)}
