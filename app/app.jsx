@@ -5,7 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Controls } from '@/components/Controls';
 import { HotelView } from '@/components/HotelView';
 import Link from 'next/link';
-// Backend-powered: we'll call the Express API at http://localhost:3001
+// Backend-powered: we'll call the Express API at https://hotes-reservation-system-kjt9.vercel.app
 
 /**
  * Generate room data
@@ -50,7 +50,7 @@ export default function App() {
   // Fetch current rooms from backend
   const fetchRooms = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/rooms');
+      const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/rooms');
       if (!res.ok) throw new Error('Failed to fetch rooms');
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) {
@@ -74,7 +74,7 @@ export default function App() {
   // Handle booking via backend
   const handleBook = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/book', {
+      const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestedCount: Number(inputValue) }),
@@ -110,7 +110,7 @@ export default function App() {
   // Handle randomize via backend
   const handleRandomize = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/random', { method: 'POST' });
+      const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/random', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
         toast.error('Randomize failed');
@@ -126,7 +126,7 @@ export default function App() {
   // Handle reset via backend
   const handleReset = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/reset', { method: 'POST' });
+      const res = await fetch('https://hotes-reservation-system-kjt9.vercel.app/api/reset', { method: 'POST' });
       if (!res.ok) {
         toast.error('Reset failed');
         return;
