@@ -123,10 +123,9 @@ export default function AlgorithmPage() {
     Object.values(roomRefs.current).forEach((r) => r.classList.remove('available-highlight'));
 
     // STEP 2: Same-floor scan top->bottom
-    statusEl.textContent = 'STEP 2 — Scanning same floor';
+    statusEl.textContent = `STEP 2 — Scanning same floor (looking for ${requestedCount})`;
     const floorsEls = Array.from(document.querySelectorAll('.floor-row'));
     let found = false;
-    const requested = 3; // demo value
     for (const floorEl of floorsEls) {
       // slide window across this floor
       const rooms = Array.from(floorEl.querySelectorAll('.room')).filter((el) => !el.classList.contains('occupied'));
@@ -154,7 +153,7 @@ export default function AlgorithmPage() {
         // pick first valid window as demo selection (lock)
         const chosen = avail.slice(0, requested).map((el) => Number(el.dataset.id));
         chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
-        statusEl.textContent = 'Same-floor optimal solution found';
+        statusEl.textContent = `Same-floor optimal solution found — selected ${chosen.length}`;
         found = true;
         floorEl.classList.remove('scanning');
         break;
@@ -169,8 +168,19 @@ export default function AlgorithmPage() {
       statusEl.textContent = 'STEP 3 — Cross-floor fallback';
       // compute all available room ids
       const allAvail = Object.values(roomRefs.current).filter((el) => !el.classList.contains('occupied'));
-      // pick a demo combination (first 3 spread across floors)
-      const chosen = [allAvail[0], allAvail[Math.floor(allAvail.length / 2)], allAvail[allAvail.length - 1]].map((el) => Number(el.dataset.id));
+      // pick a demo combination spread across floors respecting requestedCount
+      const n = Math.min(requestedCount, allAvail.length);
+      const L = allAvail.length;
+      const chosenEls = [];
+      if (n === 1) {
+        chosenEls.push(allAvail[Math.floor(L / 2)]);
+      } else {
+        for (let i = 0; i < n; i++) {
+          const idx = Math.round((i * (L - 1)) / (n - 1));
+          chosenEls.push(allAvail[idx]);
+        }
+      }
+      const chosen = chosenEls.map((el) => Number(el.dataset.id));
       // draw connections
       await sleep(300);
       drawConnections(chosen.map((id, i, arr) => [id, arr[(i + 1) % arr.length]]));
@@ -185,7 +195,7 @@ export default function AlgorithmPage() {
       });
       await sleep(900);
       // compute and show travel time (visual badge)
-      statusEl.textContent = `Computed total travel: ${(maxF - minF) * 2} (vertical) + spread (horizontal)`;
+      statusEl.textContent = `Computed total travel: ${(maxF - minF) * 2} (vertical) + spread (horizontal) — selected ${chosen.length}`;
       // mark selected
       chosen.forEach((id) => roomRefs.current[id].classList.add('selected'));
       await sleep(600);
