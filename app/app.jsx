@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Controls } from '@/components/Controls';
 import { HotelView } from '@/components/HotelView';
+import Link from 'next/link';
 import { allocateRooms } from '@/utils/bookingEngine';
 import { randomizeOccupancy } from '@/utils/randomize';
 
@@ -141,7 +142,7 @@ export default function App() {
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
         }}>
-          ⬢ HOTEL RESERVATION SYSTEM
+           HOTEL RESERVATION SYSTEM 
         </h1>
         <p style={{ 
           margin: '8px 0 0 0',
@@ -149,8 +150,20 @@ export default function App() {
           color: '#a0afc9',
           letterSpacing: '0.5px',
         }}>
-          97 Total Rooms Across 10 Floors │ Advanced Booking Engine
+          97 Total Rooms Across 10 Floors │ Advanced Booking Engine | DSA
         </p>
+        <div style={{ marginTop: 12 }}>
+          <Link href="/algorithm">
+            <button style={{
+              background: '#ff4d4f',
+              color: '#fff',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}>View Algorithm</button>
+          </Link>
+        </div>
       </div>
 
       <Controls
