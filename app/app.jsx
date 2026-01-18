@@ -1,21 +1,20 @@
-'use client';
+"use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Controls } from '@/components/Controls';
 import { HotelView } from '@/components/HotelView';
 import Link from 'next/link';
-import { allocateRooms } from '@/utils/bookingEngine';
-import { randomizeOccupancy } from '@/utils/randomize';
+// Backend-powered: we'll call the Express API at http://localhost:3001
 
 /**
  * Generate room data
  * Floors 1-9: 10 rooms each (101-110, 201-210, ...)
  * Floor 10: 7 rooms (1001-1007)
  */
+
 function generateRooms() {
   const rooms = [];
-  let id = 1;
 
   // Floors 1-9
   for (let floor = 1; floor <= 9; floor++) {
@@ -48,47 +47,96 @@ export default function App() {
   const [rooms, setRooms] = useState(generateRooms());
   const [inputValue, setInputValue] = useState(2);
 
-  // Handle booking
-  const handleBook = () => {
-    const roomsToBook = allocateRooms(rooms, inputValue);
-
-    if (roomsToBook.length === 0) {
-      toast.error(
-        `Not enough available rooms for ${inputValue} booking(s). Try the Random Occupancy button first.`
-      );
-      return;
-    }
-
-    // Create new rooms array with marked bookings
-    const updated = rooms.map((room) => {
-      if (roomsToBook.includes(room.id)) {
-        return {
-          ...room,
-          occupied: true,
-          newlyBooked: true,
-        };
+  // Fetch current rooms from backend
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/rooms');
+      if (!res.ok) throw new Error('Failed to fetch rooms');
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        // fallback to local generation
+        setRooms(generateRooms());
+        toast('Using local rooms fallback');
+        return;
       }
-      return room;
-    });
-
-    setRooms(updated);
-    toast.success(`Successfully booked ${roomsToBook.length} room(s): ${roomsToBook.join(', ')}`);
+      // ensure `newlyBooked` flag present on each room
+      setRooms(data.map(r => ({ ...r, newlyBooked: false })));
+    } catch (err) {
+      setRooms(generateRooms());
+      toast.error('Could not load rooms from backend — using local data');
+    }
   };
 
-  // Handle random occupancy
-  const handleRandomize = () => {
-    setRooms(randomizeOccupancy(rooms));
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  // Handle booking via backend
+  const handleBook = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedCount: Number(inputValue) }),
+      });
+      // Parse JSON if present, otherwise read text
+      let data = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch (e) {
+          data = null;
+        }
+      } else {
+        const text = await res.text().catch(() => null);
+        if (text) data = { error: text };
+      }
+
+      if (!res.ok) {
+        const msg = data?.error || `Booking failed (${res.status})`;
+        toast.error(msg);
+        return;
+      }
+
+      const booked = data?.bookedRooms || [];
+      setRooms(prev => prev.map(r => booked.includes(r.id) ? { ...r, occupied: true, newlyBooked: true } : r));
+      toast.success(`Successfully booked ${booked.length} room(s): ${booked.join(', ')}`);
+    } catch (err) {
+      toast.error('Booking request failed');
+    }
   };
 
-  // Handle reset
-  const handleReset = () => {
-    setRooms(
-      rooms.map((room) => ({
-        ...room,
-        occupied: false,
-        newlyBooked: false,
-      }))
-    );
+  // Handle randomize via backend
+  const handleRandomize = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/random', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error('Randomize failed');
+        return;
+      }
+      const occupiedRooms = data.occupiedRooms || [];
+      setRooms(prev => prev.map(r => ({ ...r, occupied: occupiedRooms.includes(r.id), newlyBooked: false })));
+    } catch (err) {
+      toast.error('Randomize request failed');
+    }
+  };
+
+  // Handle reset via backend
+  const handleReset = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/reset', { method: 'POST' });
+      if (!res.ok) {
+        toast.error('Reset failed');
+        return;
+      }
+      // reload rooms from backend
+      await fetchRooms();
+      toast.success('Rooms reset');
+    } catch (err) {
+      toast.error('Reset request failed');
+    }
   };
 
   return (
